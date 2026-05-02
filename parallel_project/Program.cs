@@ -3,8 +3,11 @@ namespace parallel_project
     internal static class Program
     {
         /// <summary>
-        ///  The main entry point for the application.
+        /// The main entry point for the application.
         /// </summary>
+        /// <remarks>
+        /// Logic: Initializes WinForms app defaults, then opens the main UI form.
+        /// </remarks>
         [STAThread]
         static void Main()
         {

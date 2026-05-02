@@ -18,6 +18,22 @@ namespace parallel_project
             public string GameWinnerSlot { get; set; } = "";
         }
 
+        /// <summary>
+        /// Applies an attack from one player's chosen hero to the other player's chosen hero.
+        /// </summary>
+        /// <param name="p1">Player state for slot "P1".</param>
+        /// <param name="p2">Player state for slot "P2".</param>
+        /// <param name="attackerSlot">Slot of the attacking player ("P1" or "P2").</param>
+        /// <param name="attackerKind">Requested attacking hero kind; falls back to first alive if invalid/dead.</param>
+        /// <param name="defenderSlot">Slot of the defending player ("P1" or "P2").</param>
+        /// <param name="defenderKind">Requested defending hero kind; falls back to first alive if invalid/dead.</param>
+        /// <returns>
+        /// A result object describing who attacked whom, damage, defender HP, and whether the game ended.
+        /// </returns>
+        /// <remarks>
+        /// Logic: Host-authoritative resolution. If the selected attacker/defender isn't alive, it picks the
+        /// first living hero on that side to ensure the round can progress.
+        /// </remarks>
         public Task<AttackResult> ResolveAttackAsync(Player p1, Player p2, string attackerSlot, HeroKind attackerKind, string defenderSlot, HeroKind defenderKind)
         {
             // Host-authoritative: chosen attacker attacks chosen defender.
@@ -64,6 +80,12 @@ namespace parallel_project
             });
         }
 
+        /// <summary>
+        /// Finds a hero of the given kind within a player's roster.
+        /// </summary>
+        /// <param name="p">Player to search.</param>
+        /// <param name="kind">Hero kind to match.</param>
+        /// <returns>The matching hero instance, or null if not found.</returns>
         private static Hero? FindHero(Player p, HeroKind kind)
         {
             for (int i = 0; i < p.Heroes.Count; i++)

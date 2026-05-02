@@ -62,11 +62,22 @@ namespace parallel_project
         private const int RequiredClicksDefault = 12;
         private const int RaceTimeoutMs = 9000;
 
+        /// <summary>
+        /// Constructs the main game UI and initializes designer-created controls.
+        /// </summary>
         public Form1()
         {
             InitializeComponent();
         }
 
+        /// <summary>
+        /// Handles the form load event; initializes UI state and runtime assets.
+        /// </summary>
+        /// <param name="sender">Event source (the form).</param>
+        /// <param name="e">Event args (unused).</param>
+        /// <remarks>
+        /// Logic: Ensures sprites exist, caches animation start positions, and resets the UI to idle.
+        /// </remarks>
         private void Form1_Load(object sender, EventArgs e)
         {
             EnsurePixelSprites();
@@ -74,6 +85,13 @@ namespace parallel_project
             ResetUiToIdle();
         }
 
+        /// <summary>
+        /// Ensures connection/session cleanup occurs when the form is closing.
+        /// </summary>
+        /// <param name="e">Closing args (can be used to cancel close; not used here).</param>
+        /// <remarks>
+        /// Logic: Runs async cleanup to stop background work and dispose pipe connection.
+        /// </remarks>
         protected override async void OnFormClosing(FormClosingEventArgs e)
         {
             base.OnFormClosing(e);
@@ -82,43 +100,117 @@ namespace parallel_project
 
         // -------------------- UI Events (Designer Wired) --------------------
 
+        /// <summary>
+        /// UI handler: host button click.
+        /// </summary>
+        /// <param name="sender">Button control.</param>
+        /// <param name="e">Event args.</param>
         private async void btnHostGame_Click(object sender, EventArgs e)
         {
             await HostGameAsync();
         }
 
+        /// <summary>
+        /// UI handler: join button click.
+        /// </summary>
+        /// <param name="sender">Button control.</param>
+        /// <param name="e">Event args.</param>
         private async void btnJoinGame_Click(object sender, EventArgs e)
         {
             await JoinGameAsync();
         }
 
+        /// <summary>
+        /// UI handler: cancel matchmaking/search button click.
+        /// </summary>
+        /// <param name="sender">Button control.</param>
+        /// <param name="e">Event args.</param>
         private void btnCancelSearch_Click(object sender, EventArgs e)
         {
             CancelSearch();
         }
 
+        /// <summary>
+        /// UI handler: load team button click.
+        /// </summary>
+        /// <param name="sender">Button control.</param>
+        /// <param name="e">Event args.</param>
         private async void btnLoadTeam_Click(object sender, EventArgs e)
         {
             await LoadTeamAsync();
         }
 
+        /// <summary>
+        /// UI handler: start fight button click.
+        /// </summary>
+        /// <param name="sender">Button control.</param>
+        /// <param name="e">Event args.</param>
         private async void btnStartFight_Click(object sender, EventArgs e)
         {
             await StartFightClickedAsync();
         }
 
+        /// <summary>
+        /// UI handler: attack race button click.
+        /// </summary>
+        /// <param name="sender">Button control.</param>
+        /// <param name="e">Event args.</param>
         private void btnAttackRace_Click(object sender, EventArgs e)
         {
             AttackRaceClick();
         }
 
+        /// <summary>
+        /// UI handler: selects the top warrior (P1) as attacker/target depending on local slot.
+        /// </summary>
+        /// <param name="sender">PictureBox control.</param>
+        /// <param name="e">Event args.</param>
         private void picTopWarrior_Click(object sender, EventArgs e) => OnHeroPictureClicked("P1", HeroKind.Warrior);
+
+        /// <summary>
+        /// UI handler: selects the top mage (P1) as attacker/target depending on local slot.
+        /// </summary>
+        /// <param name="sender">PictureBox control.</param>
+        /// <param name="e">Event args.</param>
         private void picTopMage_Click(object sender, EventArgs e) => OnHeroPictureClicked("P1", HeroKind.Mage);
+
+        /// <summary>
+        /// UI handler: selects the top archer (P1) as attacker/target depending on local slot.
+        /// </summary>
+        /// <param name="sender">PictureBox control.</param>
+        /// <param name="e">Event args.</param>
         private void picTopArcher_Click(object sender, EventArgs e) => OnHeroPictureClicked("P1", HeroKind.Archer);
+
+        /// <summary>
+        /// UI handler: selects the bottom warrior (P2) as attacker/target depending on local slot.
+        /// </summary>
+        /// <param name="sender">PictureBox control.</param>
+        /// <param name="e">Event args.</param>
         private void picBottomWarrior_Click(object sender, EventArgs e) => OnHeroPictureClicked("P2", HeroKind.Warrior);
+
+        /// <summary>
+        /// UI handler: selects the bottom mage (P2) as attacker/target depending on local slot.
+        /// </summary>
+        /// <param name="sender">PictureBox control.</param>
+        /// <param name="e">Event args.</param>
         private void picBottomMage_Click(object sender, EventArgs e) => OnHeroPictureClicked("P2", HeroKind.Mage);
+
+        /// <summary>
+        /// UI handler: selects the bottom archer (P2) as attacker/target depending on local slot.
+        /// </summary>
+        /// <param name="sender">PictureBox control.</param>
+        /// <param name="e">Event args.</param>
         private void picBottomArcher_Click(object sender, EventArgs e) => OnHeroPictureClicked("P2", HeroKind.Archer);
 
+        /// <summary>
+        /// Applies hero selection clicks to attacker/target state based on which side was clicked.
+        /// </summary>
+        /// <param name="slot">The clicked hero's slot ("P1" or "P2").</param>
+        /// <param name="kind">The clicked hero kind.</param>
+        /// <remarks>
+        /// Logic: Clicking your own side sets the attacker; clicking the opponent sets the target.
+        /// Dead heroes are ignored to prevent invalid selections.
+        /// </remarks>
         private void OnHeroPictureClicked(string slot, HeroKind kind)
         {
             if (_localSlot != "P1" && _localSlot != "P2")
@@ -148,6 +240,13 @@ namespace parallel_project
 
         // -------------------- Activity 1: Matchmaking --------------------
 
+        /// <summary>
+        /// Hosts a game session (P1) and waits for a client to join.
+        /// </summary>
+        /// <remarks>
+        /// Logic: Creates/starts a named-pipe server via <see cref="MatchmakingManager"/>, hooks message events,
+        /// then starts a short cancel window where either side can cancel before proceeding.
+        /// </remarks>
         private async Task HostGameAsync()
         {
             await CleanupAsync("Start host");
@@ -198,6 +297,13 @@ namespace parallel_project
             }
         }
 
+        /// <summary>
+        /// Joins a hosted game session (becomes P2 after ROLE assignment).
+        /// </summary>
+        /// <remarks>
+        /// Logic: Connects as a named-pipe client, waits for host role assignment, then participates in the
+        /// cancel window handshake.
+        /// </remarks>
         private async Task JoinGameAsync()
         {
             await CleanupAsync("Start join");
@@ -245,6 +351,13 @@ namespace parallel_project
             }
         }
 
+        /// <summary>
+        /// Cancels matchmaking/search and starts cleanup.
+        /// </summary>
+        /// <remarks>
+        /// Logic: Cancels the matchmaking/cancel-window tokens, optionally notifies the remote side, then
+        /// triggers async cleanup to reset UI/state.
+        /// </remarks>
         private void CancelSearch()
         {
             Log("Activity 1: Cancel requested -> CTS.Cancel()");
@@ -259,6 +372,10 @@ namespace parallel_project
             _ = CleanupAsync("Cancelled");
         }
 
+        /// <summary>
+        /// Hooks up connection events so the form can react to messages/disconnects.
+        /// </summary>
+        /// <param name="conn">Active pipe connection.</param>
         private void HookConnection(GameConnection conn)
         {
             conn.MessageReceived += OnNetMessage;
@@ -269,6 +386,14 @@ namespace parallel_project
             };
         }
 
+        /// <summary>
+        /// Starts the shared "cancel window" countdown before unlocking team loading.
+        /// </summary>
+        /// <param name="seconds">Number of seconds to show the countdown.</param>
+        /// <remarks>
+        /// Logic: Host sends READYWIN, both sides tick a countdown label; when it finishes, host sends
+        /// UNLOCK_LOAD and both sides enable loading.
+        /// </remarks>
         private async Task BeginCancelWindowAsync(int seconds)
         {
             if (_conn == null || _sessionCts == null)
@@ -306,6 +431,9 @@ namespace parallel_project
             }
         }
 
+        /// <summary>
+        /// Enables the UI flow for Activity 2 (team loading) after matchmaking is confirmed.
+        /// </summary>
         private void UnlockTeamLoading()
         {
             Log("Match confirmed. Load Team unlocked.");
@@ -315,6 +443,13 @@ namespace parallel_project
 
         // -------------------- Activity 2: Team + Start Fight --------------------
 
+        /// <summary>
+        /// Loads the local team and sends the TEAM_READY message to the other player.
+        /// </summary>
+        /// <remarks>
+        /// Logic: Uses <see cref="ArenaLoader"/> to build heroes concurrently, stores them into P1/P2 state,
+        /// and serializes them so the opponent can reconstruct the same roster.
+        /// </remarks>
         private async Task LoadTeamAsync()
         {
             if (_conn == null || !_conn.IsConnected || _sessionCts == null)
@@ -375,6 +510,9 @@ namespace parallel_project
             }
         }
 
+        /// <summary>
+        /// Updates UI/state when both local and remote teams are marked ready.
+        /// </summary>
         private void OnBothTeamsReady()
         {
             Log("Both teams ready." );
@@ -382,6 +520,12 @@ namespace parallel_project
             btnStartFight.Enabled = true;
         }
 
+        /// <summary>
+        /// Handles "Start Fight" click; sends readiness and (host) triggers the countdown when both ready.
+        /// </summary>
+        /// <remarks>
+        /// Logic: Both players send START_READY. Host starts the countdown only after receiving both.
+        /// </remarks>
         private async Task StartFightClickedAsync()
         {
             if (_conn == null || !_conn.IsConnected || _sessionCts == null)
@@ -410,6 +554,12 @@ namespace parallel_project
                 lblStatus.Text = "Waiting for other player to click Start Fight...";
         }
 
+        /// <summary>
+        /// Host-only: broadcasts the fight countdown and starts the first round.
+        /// </summary>
+        /// <remarks>
+        /// Logic: Broadcasts FIGHT_CD ticks so both clients stay in sync, then starts Activity 3 rounds.
+        /// </remarks>
         private async Task StartFightCountdownHostAsync()
         {
             if (_conn == null || _sessionCts == null)
@@ -438,6 +588,13 @@ namespace parallel_project
 
         // -------------------- Activity 3: Interactive Speed Race --------------------
 
+        /// <summary>
+        /// UI handler for the "Attack Race" button; increments click counter and completes the local race.
+        /// </summary>
+        /// <remarks>
+        /// Logic: When required clicks are reached it completes a TCS. The joiner also sends RACE_DONE
+        /// (including current attacker/target selection) to the host.
+        /// </remarks>
         private void AttackRaceClick()
         {
             if (_roundId <= 0 && _requiredClicks == 0)
@@ -469,6 +626,13 @@ namespace parallel_project
             }
         }
 
+        /// <summary>
+        /// Host-only: runs a single round (race winner selection, attack resolution, and broadcasts).
+        /// </summary>
+        /// <remarks>
+        /// Logic: Starts the round, waits for local vs remote completion (or timeout), determines winner,
+        /// resolves the attack using <see cref="CombatEngine"/>, broadcasts results, and loops to next round.
+        /// </remarks>
         private async Task RunRoundHostAsync()
         {
             if (!_isHost || _conn == null || _sessionCts == null)
@@ -545,12 +709,24 @@ namespace parallel_project
             await RunRoundHostAsync();
         }
 
+        /// <summary>
+        /// Enables the race UI for the current round and updates the status prompt.
+        /// </summary>
         private void EnableRaceUi()
         {
             btnAttackRace.Enabled = true;
             lblStatus.Text = "Speed race: click " + _requiredClicks + " times!";
         }
 
+        /// <summary>
+        /// Local helper that times out the race if clicks aren't finished in time.
+        /// </summary>
+        /// <param name="roundId">Round identifier for which this watcher is valid.</param>
+        /// <param name="timeoutMs">How long to wait before forcing completion.</param>
+        /// <param name="token">Cancellation token for aborting the watcher.</param>
+        /// <remarks>
+        /// Logic: After the timeout, completes the local TCS (if still pending) so the round can continue.
+        /// </remarks>
         private async Task RunLocalRaceWatcherAsync(int roundId, int timeoutMs, CancellationToken token)
         {
             try
@@ -586,6 +762,14 @@ namespace parallel_project
 
         // -------------------- Networking --------------------
 
+        /// <summary>
+        /// Sends a protocol message to the remote side and applies it locally on the host.
+        /// </summary>
+        /// <param name="msg">Single-line protocol message (e.g., "TYPE|payload").</param>
+        /// <remarks>
+        /// Logic: Host sends the line over the pipe, then calls <see cref="OnNetMessage"/> locally so it runs
+        /// the same handler code path.
+        /// </remarks>
         private async Task BroadcastAsync(string msg)
         {
             if (_conn == null || !_conn.IsConnected || _sessionCts == null)
@@ -595,6 +779,13 @@ namespace parallel_project
             OnNetMessage(msg); // host also applies locally
         }
 
+        /// <summary>
+        /// Parses a raw network line and dispatches to the corresponding handler.
+        /// </summary>
+        /// <param name="raw">Raw line received from the named pipe.</param>
+        /// <remarks>
+        /// Logic: Marshals to the UI thread (InvokeRequired) then routes by the opcode prefix before the first '|'.
+        /// </remarks>
         private void OnNetMessage(string raw)
         {
             if (InvokeRequired)
@@ -663,6 +854,14 @@ namespace parallel_project
             }
         }
 
+        /// <summary>
+        /// Handles TEAM_READY messages by reconstructing the sender's hero roster.
+        /// </summary>
+        /// <param name="payload">"slot|hero;hero;hero" payload.</param>
+        /// <remarks>
+        /// Logic: Deserializes heroes, stores them into the correct player slot, updates UI, and advances to
+        /// "both teams ready" if applicable.
+        /// </remarks>
         private void HandleTeamReady(string payload)
         {
             // TEAM_READY|<slot>|<hero;hero;hero>
@@ -690,6 +889,13 @@ namespace parallel_project
                 OnBothTeamsReady();
         }
 
+        /// <summary>
+        /// Handles START_READY by marking the remote side as having clicked start.
+        /// </summary>
+        /// <param name="payload">Sender slot ("P1" or "P2").</param>
+        /// <remarks>
+        /// Logic: Once both sides have clicked, host triggers the shared countdown.
+        /// </remarks>
         private void HandleStartReady(string payload)
         {
             _remoteStartClicked = true;
@@ -703,6 +909,10 @@ namespace parallel_project
             }
         }
 
+        /// <summary>
+        /// Updates the countdown label based on FIGHT_CD payload.
+        /// </summary>
+        /// <param name="payload">Countdown text ("3","2","1","FIGHT", or empty to clear).</param>
         private void HandleFightCountdown(string payload)
         {
             lblCountdown.Text = payload;
@@ -710,6 +920,13 @@ namespace parallel_project
                 Log("Countdown: " + payload);
         }
 
+        /// <summary>
+        /// Initializes per-round race state based on ROUND_START broadcast.
+        /// </summary>
+        /// <param name="payload">"roundId|requiredClicks|timeoutMs" payload.</param>
+        /// <remarks>
+        /// Logic: Resets counters, ensures valid selections, enables race UI, and starts the local watcher.
+        /// </remarks>
         private void HandleRoundStart(string payload)
         {
             // ROUND_START|roundId|requiredClicks|timeoutMs
@@ -732,6 +949,13 @@ namespace parallel_project
             _ = RunLocalRaceWatcherAsync(_roundId, timeoutMs, _sessionCts?.Token ?? CancellationToken.None);
         }
 
+        /// <summary>
+        /// Host-only: receives remote race completion and the remote's chosen attacker/target.
+        /// </summary>
+        /// <param name="payload">"roundId|attackerKind|targetKind" payload.</param>
+        /// <remarks>
+        /// Logic: Stores the remote selection and completes the host-side TCS used to decide the race winner.
+        /// </remarks>
         private void HandleRaceDone(string payload)
         {
             if (!_isHost) return;
@@ -748,6 +972,10 @@ namespace parallel_project
             _remoteRaceDoneTcs?.TrySetResult(true);
         }
 
+        /// <summary>
+        /// Handles ROUND_WINNER broadcast by disabling race UI and completing the winner TCS.
+        /// </summary>
+        /// <param name="payload">"roundId|P1" or "roundId|P2" payload.</param>
         private void HandleRoundWinner(string payload)
         {
             // ROUND_WINNER|roundId|P1/P2
@@ -763,6 +991,13 @@ namespace parallel_project
             _remoteWinnerTcs?.TrySetResult(winnerSlot);
         }
 
+        /// <summary>
+        /// Handles ATTACK broadcasts by animating the attack and applying defender HP.
+        /// </summary>
+        /// <param name="payload">Attack payload including slots, kinds, damage and resulting HP.</param>
+        /// <remarks>
+        /// Logic: Parses fields, logs them, then runs <see cref="PlayAttackAsync"/> to animate and apply state.
+        /// </remarks>
         private void HandleAttack(string payload)
         {
             // ATTACK|roundId|attackerSlot|attackerKind|defenderSlot|defenderKind|damage|defenderHpAfter|defenderDied
@@ -784,6 +1019,10 @@ namespace parallel_project
             _ = PlayAttackAsync(roundId, attackerSlot, attackerKind, defenderSlot, defenderKind, defenderHpAfter, defenderDied);
         }
 
+        /// <summary>
+        /// Handles GAME_OVER by showing the winner and disabling gameplay buttons.
+        /// </summary>
+        /// <param name="payload">Winner slot string ("P1" or "P2").</param>
         private void HandleGameOver(string payload)
         {
             string winner = payload.Trim();
@@ -796,6 +1035,20 @@ namespace parallel_project
 
         // -------------------- Animation + UI Updates --------------------
 
+        /// <summary>
+        /// Animates an attack and applies the defender's HP change.
+        /// </summary>
+        /// <param name="roundId">Round identifier (informational; not used for gating here).</param>
+        /// <param name="attackerSlot">Attacker slot ("P1" or "P2").</param>
+        /// <param name="attackerKind">Attacker hero kind.</param>
+        /// <param name="defenderSlot">Defender slot ("P1" or "P2").</param>
+        /// <param name="defenderKind">Defender hero kind.</param>
+        /// <param name="defenderHpAfter">Defender HP after applying damage.</param>
+        /// <param name="defenderDied">True if the defender died from this attack.</param>
+        /// <remarks>
+        /// Logic: Uses a semaphore to serialize animations, moves the attacker forward/back, plays an effect,
+        /// then updates in-memory HP + progress bars.
+        /// </remarks>
         private async Task PlayAttackAsync(int roundId, string attackerSlot, HeroKind attackerKind, string defenderSlot, HeroKind defenderKind, int defenderHpAfter, bool defenderDied)
         {
             if (_sessionCts == null) return;
@@ -841,6 +1094,16 @@ namespace parallel_project
             }
         }
 
+        /// <summary>
+        /// Plays a per-class visual effect for an attack.
+        /// </summary>
+        /// <param name="attackerKind">Hero class used to pick the effect (arrow/fire/slash).</param>
+        /// <param name="attackerPic">Attacker picture box (effect origin).</param>
+        /// <param name="defenderPic">Defender picture box (effect destination/target).</param>
+        /// <param name="token">Cancellation token used during animations.</param>
+        /// <remarks>
+        /// Logic: Warrior uses a brief flash at the target; Archer/Mage animate a projectile from attacker to defender.
+        /// </remarks>
         private async Task PlayEffectAsync(HeroKind attackerKind, PictureBox attackerPic, PictureBox defenderPic, CancellationToken token)
         {
             if (picEffect == null)
@@ -878,6 +1141,12 @@ namespace parallel_project
             picEffect.Visible = false;
         }
 
+        /// <summary>
+        /// Computes the top-left point that centers an effect image over a source PictureBox.
+        /// </summary>
+        /// <param name="src">Source control to center over.</param>
+        /// <param name="effectSize">Effect size to center.</param>
+        /// <returns>A point suitable for setting <see cref="Control.Location"/>.</returns>
         private static Point CenterOf(PictureBox src, Size effectSize)
         {
             int x = src.Left + (src.Width / 2) - (effectSize.Width / 2);
@@ -885,6 +1154,17 @@ namespace parallel_project
             return new Point(x, y);
         }
 
+        /// <summary>
+        /// Moves a PictureBox smoothly from one point to another in fixed steps.
+        /// </summary>
+        /// <param name="pic">Control to move.</param>
+        /// <param name="from">Start location.</param>
+        /// <param name="to">End location.</param>
+        /// <param name="steps">Number of interpolation steps.</param>
+        /// <param name="token">Cancellation token for aborting movement.</param>
+        /// <remarks>
+        /// Logic: Linear interpolation per step with a small delay to create motion.
+        /// </remarks>
         private async Task MovePictureAsync(PictureBox pic, Point from, Point to, int steps, CancellationToken token)
         {
             for (int i = 1; i <= steps; i++)
@@ -897,6 +1177,12 @@ namespace parallel_project
             }
         }
 
+        /// <summary>
+        /// Applies the post-attack HP value to the defender hero in local in-memory state.
+        /// </summary>
+        /// <param name="defenderSlot">Defender slot ("P1" or "P2").</param>
+        /// <param name="kind">Defender hero kind to update.</param>
+        /// <param name="hpAfter">HP value to set (clamped at 0).</param>
         private void ApplyDefenderHp(string defenderSlot, HeroKind kind, int hpAfter)
         {
             Player? p = defenderSlot == "P1" ? _p1 : _p2;
@@ -912,12 +1198,21 @@ namespace parallel_project
             }
         }
 
+        /// <summary>
+        /// Refreshes both sides' UI from the current player state.
+        /// </summary>
         private void UpdateAllUi()
         {
             UpdateSide("P1", _p1);
             UpdateSide("P2", _p2);
         }
 
+        /// <summary>
+        /// Checks whether the specified hero is alive in the specified slot.
+        /// </summary>
+        /// <param name="slot">"P1" or "P2".</param>
+        /// <param name="kind">Hero kind to check.</param>
+        /// <returns>True if the hero exists and has health &gt; 0.</returns>
         private bool IsHeroAlive(string slot, HeroKind kind)
         {
             Player? p = slot == "P1" ? _p1 : _p2;
@@ -930,6 +1225,11 @@ namespace parallel_project
             return false;
         }
 
+        /// <summary>
+        /// Gets the kind of the first living hero for a given slot.
+        /// </summary>
+        /// <param name="slot">"P1" or "P2".</param>
+        /// <returns>The first alive hero kind, or Warrior as a safe default.</returns>
         private HeroKind GetFirstAliveKind(string slot)
         {
             Player? p = slot == "P1" ? _p1 : _p2;
@@ -938,6 +1238,12 @@ namespace parallel_project
             return h != null ? h.Kind : HeroKind.Warrior;
         }
 
+        /// <summary>
+        /// Ensures attacker/target selections are set to living heroes (auto-fills if unset or dead).
+        /// </summary>
+        /// <remarks>
+        /// Logic: If the current selection is invalid, it picks the first living hero on that side.
+        /// </remarks>
         private void EnsureSelectionDefaults()
         {
             if (_localSlot != "P1" && _localSlot != "P2")
@@ -958,6 +1264,9 @@ namespace parallel_project
             }
         }
 
+        /// <summary>
+        /// Updates PictureBox background colors to reflect current attacker and target selections.
+        /// </summary>
         private void UpdateSelectionHighlights()
         {
             Color normal = Color.FromArgb(30, 30, 34);
@@ -984,6 +1293,11 @@ namespace parallel_project
             if (targetPic != null) targetPic.BackColor = targetSel;
         }
 
+        /// <summary>
+        /// Updates one side's hero visibility and HP bars from the given player state.
+        /// </summary>
+        /// <param name="slot">"P1" or "P2".</param>
+        /// <param name="p">Player state for that slot.</param>
         private void UpdateSide(string slot, Player? p)
         {
             if (p == null || p.Heroes.Count < 3) return;
@@ -1008,6 +1322,12 @@ namespace parallel_project
             }
         }
 
+        /// <summary>
+        /// Maps a slot + hero kind to the corresponding hero PictureBox control.
+        /// </summary>
+        /// <param name="slot">"P1" (top) or "P2" (bottom).</param>
+        /// <param name="kind">Hero kind to map.</param>
+        /// <returns>The matching PictureBox control.</returns>
         private PictureBox GetHeroPictureBox(string slot, HeroKind kind)
         {
             if (slot == "P1")
@@ -1028,6 +1348,12 @@ namespace parallel_project
             };
         }
 
+        /// <summary>
+        /// Maps a slot + hero kind to the corresponding HP ProgressBar control.
+        /// </summary>
+        /// <param name="slot">"P1" (top) or "P2" (bottom).</param>
+        /// <param name="kind">Hero kind to map.</param>
+        /// <returns>The matching ProgressBar control.</returns>
         private ProgressBar GetHeroHpBar(string slot, HeroKind kind)
         {
             if (slot == "P1")
@@ -1048,6 +1374,12 @@ namespace parallel_project
             };
         }
 
+        /// <summary>
+        /// Updates role labels to reflect the assigned local slot and host/join status.
+        /// </summary>
+        /// <remarks>
+        /// Logic: Also refreshes selection highlights so the UI matches current local/remote orientation.
+        /// </remarks>
         private void SetRoleLabels()
         {
             if (_localSlot == "P1")
@@ -1072,6 +1404,13 @@ namespace parallel_project
             UpdateSelectionHighlights();
         }
 
+        /// <summary>
+        /// Appends a message to the on-screen log list.
+        /// </summary>
+        /// <param name="msg">Message text to append.</param>
+        /// <remarks>
+        /// Logic: Marshals to the UI thread when called from background tasks.
+        /// </remarks>
         private void Log(string msg)
         {
             if (InvokeRequired)
@@ -1085,6 +1424,12 @@ namespace parallel_project
                 lstLog.TopIndex = lstLog.Items.Count - 1;
         }
 
+        /// <summary>
+        /// Resets UI controls to the initial idle state.
+        /// </summary>
+        /// <remarks>
+        /// Logic: Clears labels, disables gameplay buttons, resets selection, and clears HP bars.
+        /// </remarks>
         private void ResetUiToIdle()
         {
             lblStatus.Text = "Status: Idle";
@@ -1114,6 +1459,9 @@ namespace parallel_project
             hpBottomArcher.Value = 0;
         }
 
+        /// <summary>
+        /// Clears team/start-related state flags for a new session.
+        /// </summary>
         private void ResetTeamState()
         {
             _localTeamReady = false;
@@ -1126,6 +1474,9 @@ namespace parallel_project
             _remoteChoiceReceived = false;
         }
 
+        /// <summary>
+        /// Clears round/race-related state so a new match/round sequence can start cleanly.
+        /// </summary>
         private void ResetRoundState()
         {
             _roundId = 0;
@@ -1136,17 +1487,31 @@ namespace parallel_project
             _remoteRaceDoneTcs = null;
         }
 
+        /// <summary>
+        /// Writes a loaded/deserialized team into the correct local player slot (P1 or P2).
+        /// </summary>
+        /// <param name="p">Player object containing slot + hero list.</param>
         private void ApplyTeam(Player p)
         {
             if (p.Slot == "P1") _p1 = p;
             if (p.Slot == "P2") _p2 = p;
         }
 
+        /// <summary>
+        /// Serializes a player's hero roster for sending over the network.
+        /// </summary>
+        /// <param name="p">Player whose <see cref="Player.Heroes"/> are serialized.</param>
+        /// <returns>Three hero wire strings joined by ';'.</returns>
         private string SerializeTeam(Player p)
         {
             return p.Heroes[0].ToWire() + ";" + p.Heroes[1].ToWire() + ";" + p.Heroes[2].ToWire();
         }
 
+        /// <summary>
+        /// Deserializes a roster wire string into a list of heroes.
+        /// </summary>
+        /// <param name="wire">Hero list wire string produced by <see cref="SerializeTeam"/>.</param>
+        /// <returns>List of heroes in the same order they were serialized.</returns>
         private List<Hero> DeserializeTeam(string wire)
         {
             string[] parts = wire.Split(';');
@@ -1156,6 +1521,13 @@ namespace parallel_project
             return heroes;
         }
 
+        /// <summary>
+        /// Ensures each hero PictureBox has an image (loaded from Assets or generated placeholder).
+        /// </summary>
+        /// <remarks>
+        /// Logic: Attempts to load CC0 pixel-art PNGs from the output `Assets` folder; if missing, generates
+        /// small 16x16 pixel-style bitmaps.
+        /// </remarks>
         private void EnsurePixelSprites()
         {
             // Prefer downloaded CC0 pixel art (Assets folder). Fallback to generated placeholders.
@@ -1172,6 +1544,14 @@ namespace parallel_project
             picBottomArcher.Image ??= a ?? MakePixelSprite(HeroKind.Archer, top: false);
         }
 
+        /// <summary>
+        /// Attempts to load an image from the runtime output Assets folder.
+        /// </summary>
+        /// <param name="fileName">File name within the `Assets` output folder.</param>
+        /// <returns>The loaded image, or null if not found/unreadable.</returns>
+        /// <remarks>
+        /// Logic: Reads the entire file into memory first to avoid locking the file on disk.
+        /// </remarks>
         private Image? TryLoadAssetImage(string fileName)
         {
             try
@@ -1194,6 +1574,9 @@ namespace parallel_project
             }
         }
 
+        /// <summary>
+        /// Generates a tiny pixel-style arrow effect bitmap (fallback when asset PNG missing).
+        /// </summary>
         private static Bitmap MakeArrowEffect()
         {
             Bitmap bmp = new Bitmap(16, 16);
@@ -1212,6 +1595,9 @@ namespace parallel_project
             return bmp;
         }
 
+        /// <summary>
+        /// Generates a tiny pixel-style fire effect bitmap (fallback when asset PNG missing).
+        /// </summary>
         private static Bitmap MakeFireEffect()
         {
             Bitmap bmp = new Bitmap(16, 16);
@@ -1226,6 +1612,9 @@ namespace parallel_project
             return bmp;
         }
 
+        /// <summary>
+        /// Generates a tiny pixel-style slash effect bitmap (fallback when asset PNG missing).
+        /// </summary>
         private static Bitmap MakeSlashEffect()
         {
             Bitmap bmp = new Bitmap(16, 16);
@@ -1240,6 +1629,12 @@ namespace parallel_project
             return bmp;
         }
 
+        /// <summary>
+        /// Generates a 16x16 pixel-style hero sprite bitmap as a placeholder.
+        /// </summary>
+        /// <param name="kind">Hero kind used to pick colors and a small class marker.</param>
+        /// <param name="top">True for P1 (slightly brighter palette); false for P2.</param>
+        /// <returns>A small bitmap intended to be scaled by the PictureBox.</returns>
         private Bitmap MakePixelSprite(HeroKind kind, bool top)
         {
             // 16x16 "pixel" sprite, scaled by PictureBox.
@@ -1304,6 +1699,9 @@ namespace parallel_project
             return bmp;
         }
 
+        /// <summary>
+        /// Caches initial hero PictureBox positions for later animation resets.
+        /// </summary>
         private void CacheStartPositions()
         {
             _startPos[picTopWarrior] = picTopWarrior.Location;
@@ -1316,6 +1714,13 @@ namespace parallel_project
 
         // -------------------- Cleanup --------------------
 
+        /// <summary>
+        /// Cancels background work, disposes the connection, and resets state/UI.
+        /// </summary>
+        /// <param name="reason">Short reason used for logging/debugging.</param>
+        /// <remarks>
+        /// Logic: Cancels CTSs, disposes the pipe, clears state, then marshals a UI reset back to the UI thread.
+        /// </remarks>
         private async Task CleanupAsync(string reason)
         {
             try { _readyWindowCts?.Cancel(); } catch { }

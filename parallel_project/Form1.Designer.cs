@@ -26,6 +26,10 @@ namespace parallel_project
         ///  Required method for Designer support - do not modify
         ///  the contents of this method with the code editor.
         /// </summary>
+        /// <remarks>
+        /// Logic: Instantiates controls, sets properties (size/colors/fonts), and wires UI events to handlers
+        /// defined in Form1.cs.
+        /// </remarks>
         private void InitializeComponent()
         {
             btnHostGame = new Button();
