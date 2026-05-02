@@ -1,16 +1,13 @@
-namespace parallel_project
+﻿namespace parallel_project
 {
     partial class Form1
     {
-        /// <summary>
-        ///  Required designer variable.
-        /// </summary>
+        // Required designer variable.
         private System.ComponentModel.IContainer components = null;
 
-        /// <summary>
-        ///  Clean up any resources being used.
-        /// </summary>
-        /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
+        // Clean up any resources being used.
+        //
+        // @param disposing: true if managed resources should be disposed; otherwise, false.
         protected override void Dispose(bool disposing)
         {
             if (disposing && (components != null))
@@ -22,14 +19,9 @@ namespace parallel_project
 
         #region Windows Form Designer generated code
 
-        /// <summary>
-        ///  Required method for Designer support - do not modify
-        ///  the contents of this method with the code editor.
-        /// </summary>
-        /// <remarks>
-        /// Logic: Instantiates controls, sets properties (size/colors/fonts), and wires UI events to handlers
-        /// defined in Form1.cs.
-        /// </remarks>
+        // Required method for Designer support - do not modify the contents of this method with the code editor.
+        //
+        // @notes: Logic: Instantiates controls, sets properties (size/colors/fonts), and wires UI events to handlers defined in Form1.cs.
         private void InitializeComponent()
         {
             btnHostGame = new Button();

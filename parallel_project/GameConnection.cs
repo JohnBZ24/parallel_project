@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.IO.Pipes;
 using System.Threading;
@@ -29,37 +29,41 @@ namespace parallel_project
         public event Action<string>? MessageReceived;
         public event Action<string>? Disconnected;
 
-        /// <summary>
-        /// Creates a new connection wrapper for a named pipe.
-        /// </summary>
-        /// <param name="pipeName">Pipe name to host/connect to.</param>
-        /// <param name="isServer">True to create the server side; false to create the client side.</param>
+        //
+        // Creates a new connection wrapper for a named pipe.
+        //
+        // @param pipeName: Pipe name to host/connect to.
+        // @param isServer: true for server (host), false for client (join).
+        //
         public GameConnection(string pipeName, bool isServer)
         {
             _pipeName = pipeName;
             _isServer = isServer;
         }
 
-        /// <summary>
-        /// Factory for a server-side connection (host).
-        /// </summary>
-        /// <param name="pipeName">Optional custom pipe name; defaults to <see cref="DefaultPipeName"/>.</param>
+        //
+        // Factory for a server-side connection (host).
+        //
+        // @param pipeName: Optional custom pipe name.
+        //
         public static GameConnection CreateServer(string? pipeName = null) => new GameConnection(pipeName ?? DefaultPipeName, isServer: true);
 
-        /// <summary>
-        /// Factory for a client-side connection (joiner).
-        /// </summary>
-        /// <param name="pipeName">Optional custom pipe name; defaults to <see cref="DefaultPipeName"/>.</param>
+        //
+        // Factory for a client-side connection (joiner).
+        //
+        // @param pipeName: Optional custom pipe name.
+        //
         public static GameConnection CreateClient(string? pipeName = null) => new GameConnection(pipeName ?? DefaultPipeName, isServer: false);
 
-        /// <summary>
-        /// Starts the underlying pipe and begins the background read loop.
-        /// </summary>
-        /// <param name="token">Cancellation token used while waiting for connection.</param>
-        /// <remarks>
-        /// Logic: Branches between server wait-for-connection and client connect. Once connected, it creates
-        /// a StreamReader/StreamWriter and starts a dedicated read loop that raises <see cref="MessageReceived"/>.
-        /// </remarks>
+        //
+        // Starts the underlying pipe and begins the background read loop.
+        //
+        // @param token: Cancels while waiting for the connection.
+        //
+        // @notes
+        // - Server waits for one client; client connects to the host.
+        // - Once connected, it starts a read loop that raises MessageReceived.
+        //
         public async Task StartAsync(CancellationToken token)
         {
             if (_isServer)
@@ -68,10 +72,11 @@ namespace parallel_project
                 await StartClientAsync(token);
         }
 
-        /// <summary>
-        /// Creates the server pipe and waits for a single client connection.
-        /// </summary>
-        /// <param name="token">Cancellation token for the wait.</param>
+        //
+        // Creates the server pipe and waits for a single client connection.
+        //
+        // @param token: Cancels the wait.
+        //
         private async Task StartServerAsync(CancellationToken token)
         {
             _server = new NamedPipeServerStream(
@@ -85,10 +90,11 @@ namespace parallel_project
             SetupStreams(_server);
         }
 
-        /// <summary>
-        /// Connects to an existing server pipe.
-        /// </summary>
-        /// <param name="token">Cancellation token for the connect.</param>
+        //
+        // Connects to an existing server pipe.
+        //
+        // @param token: Cancels the connect.
+        //
         private async Task StartClientAsync(CancellationToken token)
         {
             _client = new NamedPipeClientStream(
@@ -101,10 +107,11 @@ namespace parallel_project
             SetupStreams(_client);
         }
 
-        /// <summary>
-        /// Initializes reader/writer wrappers and kicks off the async read loop.
-        /// </summary>
-        /// <param name="stream">Connected pipe stream.</param>
+        //
+        // Initializes reader/writer wrappers and kicks off the async read loop.
+        //
+        // @param stream: Connected pipe stream.
+        //
         private void SetupStreams(Stream stream)
         {
             _reader = new StreamReader(stream);
@@ -113,14 +120,15 @@ namespace parallel_project
             _readLoop = Task.Run(() => ReadLoopAsync(_shutdown.Token));
         }
 
-        /// <summary>
-        /// Continuously reads line-delimited messages and raises <see cref="MessageReceived"/>.
-        /// </summary>
-        /// <param name="token">Cancellation token used to stop the loop during disposal.</param>
-        /// <remarks>
-        /// Logic: A null line indicates the remote end closed. Any read exception triggers a disconnect callback
-        /// unless we are already shutting down.
-        /// </remarks>
+        //
+        // Continuously reads line-delimited messages and raises MessageReceived.
+        //
+        // @param token: Cancels the loop during shutdown.
+        //
+        // @notes
+        // - Null line means the remote side closed.
+        // - Exceptions report Disconnected unless we're already shutting down.
+        //
         private async Task ReadLoopAsync(CancellationToken token)
         {
             string reason = "Disconnected";
@@ -147,14 +155,13 @@ namespace parallel_project
             }
         }
 
-        /// <summary>
-        /// Sends a single line-delimited message to the remote endpoint.
-        /// </summary>
-        /// <param name="message">Message payload (a single line; newline not expected).</param>
-        /// <param name="token">Cancellation token for the send lock/writer.</param>
-        /// <remarks>
-        /// Logic: Uses a semaphore so concurrent sends don't interleave and corrupt the stream.
-        /// </remarks>
+        //
+        // Sends a single line-delimited message to the remote endpoint.
+        //
+        // @param message: Message payload (single line).
+        // @param token: Cancels waiting on the send lock.
+        // @notes: Send is locked so concurrent writes don't interleave.
+        //
         public async Task SendAsync(string message, CancellationToken token = default)
         {
             if (!IsConnected || _writer == null)
@@ -171,12 +178,11 @@ namespace parallel_project
             }
         }
 
-        /// <summary>
-        /// Stops the read loop and releases all underlying resources.
-        /// </summary>
-        /// <remarks>
-        /// Logic: Cancels the internal shutdown token, awaits the read loop, then disposes streams and locks.
-        /// </remarks>
+        //
+        // Stops the read loop and releases all underlying resources.
+        //
+        // @notes: Cancels shutdown, awaits the read loop, then disposes streams and locks.
+        //
         public async ValueTask DisposeAsync()
         {
             try { _shutdown.Cancel(); } catch { }

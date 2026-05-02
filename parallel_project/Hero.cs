@@ -1,8 +1,8 @@
-namespace parallel_project
+﻿namespace parallel_project
 {
-    /// <summary>
-    /// Identifies a hero archetype used for UI selection and combat rules.
-    /// </summary>
+    //
+    // Hero archetype id used for UI selection and combat routing.
+    //
     public enum HeroKind
     {
         Warrior = 0,
@@ -10,9 +10,9 @@ namespace parallel_project
         Archer = 2
     }
 
-    /// <summary>
-    /// Represents a single combat unit with stats and current health.
-    /// </summary>
+    //
+    // Represents a single combat unit with stats and current health.
+    //
     public class Hero
     {
         public HeroKind Kind { get; }
@@ -22,22 +22,23 @@ namespace parallel_project
         public int Attack { get; set; }
         public int Speed { get; set; }
 
-        /// <summary>
-        /// True when the hero still has health remaining.
-        /// </summary>
+        //
+        // True when the hero still has health remaining.
+        //
         public bool IsAlive
         {
             get { return Health > 0; }
         }
 
-        /// <summary>
-        /// Creates a new hero with the given stats.
-        /// </summary>
-        /// <param name="kind">Archetype identifier.</param>
-        /// <param name="name">Display name.</param>
-        /// <param name="health">Starting (and initial max) HP.</param>
-        /// <param name="attack">Damage dealt per attack.</param>
-        /// <param name="speed">Speed stat (currently informational).</param>
+        //
+        // Creates a new hero with the given stats.
+        //
+        // @param kind: Archetype id.
+        // @param name: Display name.
+        // @param health: Starting HP (also sets MaxHealth).
+        // @param attack: Damage dealt per attack.
+        // @param speed: Speed stat (mostly informational in this project).
+        //
         public Hero(HeroKind kind, string name, int health, int attack, int speed)
         {
             Kind = kind;
@@ -48,28 +49,24 @@ namespace parallel_project
             Speed = speed;
         }
 
-        /// <summary>
-        /// Serializes this hero to a compact string for sending over the wire.
-        /// </summary>
-        /// <remarks>
-        /// Logic: Uses comma-separated fields in a fixed order.
-        /// Format: Kind,Name,MaxHealth,Attack,Speed,Health
-        /// </remarks>
+        //
+        // Serializes this hero to a compact string for sending over the wire.
+        //
+        // @returns: "Kind,Name,MaxHealth,Attack,Speed,Health"
+        //
         public string ToWire()
         {
             // Kind,Name,MaxHealth,Attack,Speed,Health
             return ((int)Kind).ToString() + "," + Name + "," + MaxHealth + "," + Attack + "," + Speed + "," + Health;
         }
 
-        /// <summary>
-        /// Parses a hero from its wire (comma-separated) representation.
-        /// </summary>
-        /// <param name="s">Wire string created by <see cref="ToWire"/>.</param>
-        /// <returns>A new <see cref="Hero"/> instance with the parsed stats and current HP.</returns>
-        /// <exception cref="FormatException">Thrown when the wire payload is missing required fields.</exception>
-        /// <remarks>
-        /// Logic: Parses integers and reconstructs the hero; current HP is applied after construction.
-        /// </remarks>
+        //
+        // Parses a hero from its wire (comma-separated) representation.
+        //
+        // @param s: Wire string created by ToWire().
+        // @returns: New Hero with parsed stats and current HP.
+        // @throws: FormatException if the payload doesn't have 6 fields.
+        //
         public static Hero FromWire(string s)
         {
             string[] parts = s.Split(',');
@@ -89,10 +86,12 @@ namespace parallel_project
             return h;
         }
 
-        /// <summary>
-        /// Reduces current health by the specified amount (clamped at 0).
-        /// </summary>
-        /// <param name="amount">Damage amount to subtract from <see cref="Health"/>.</param>
+        //
+        // Applies damage to this hero.
+        //
+        // @param amount: Damage to subtract from Health.
+        // @notes: Health is clamped at 0.
+        //
         public void TakeDamage(int amount)
         {
             Health -= amount;

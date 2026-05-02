@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -6,19 +6,19 @@ namespace parallel_project
 {
     public class ArenaLoader
     {
-        /// <summary>
-        /// Loads/builds the local player's team asynchronously (one task per hero) and waits for all to finish.
-        /// </summary>
-        /// <param name="localName">Display name for the local player.</param>
-        /// <param name="localSlot">Slot identifier (typically "P1" or "P2").</param>
-        /// <param name="log">Callback used to write status messages to the UI log.</param>
-        /// <param name="token">Cancellation token to abort loading.</param>
-        /// <returns>A <see cref="Player"/> with exactly three heroes assigned.</returns>
-        /// <remarks>
-        /// Logic: Starts three independent tasks (warrior/mage/archer) and coordinates completion using
-        /// a <see cref="CountdownEvent"/>. If any hero task didn't populate its result (e.g., due to cancellation),
-        /// a default hero instance is created as a fallback.
-        /// </remarks>
+        //
+        // Loads/builds the local player's team asynchronously (one task per hero) and waits for all to finish.
+        //
+        // @param localName: Display name for the local player.
+        // @param localSlot: Slot id (usually "P1" or "P2").
+        // @param log: Callback used to write status messages to the UI log.
+        // @param token: Cancels loading.
+        // @returns: A Player with exactly three heroes assigned.
+        //
+        // @notes
+        // - Starts three independent tasks (warrior/mage/archer) and waits using CountdownEvent.
+        // - If a task doesn't set its hero (cancellation/exception), a default hero is used.
+        //
         public async Task<Player> LoadLocalTeamAsync(string localName, string localSlot, System.Action<string> log, CancellationToken token)
         {
             Player local = new Player(localName, localSlot);
