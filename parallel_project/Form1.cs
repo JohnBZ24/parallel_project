@@ -23,6 +23,8 @@ namespace parallel_project
         private bool _isHost;
         private string _localSlot = ""; // "P1" or "P2"
 
+        private bool _loadUnlocked;
+
         // Activity 2
         private Player? _p1;
         private Player? _p2;
@@ -38,21 +40,9 @@ namespace parallel_project
         private HeroKind _selectedAttackerKind = HeroKind.Warrior;
         private HeroKind _selectedTargetKind = HeroKind.Warrior;
 
-        // Host-only: remote winner's chosen attacker/target
-        private HeroKind _remoteChosenAttackerKind = HeroKind.Warrior;
-        private HeroKind _remoteChosenTargetKind = HeroKind.Warrior;
-        private bool _remoteChoiceReceived;
-
         // Activity 3
         private int _roundId;
         private int _requiredClicks;
-        private int _clickCount;
-
-        private TaskCompletionSource<bool>? _localClickDoneTcs;
-        private TaskCompletionSource<string>? _remoteWinnerTcs;
-
-        // Host-only: set when remote sends RACE_DONE for current round.
-        private TaskCompletionSource<bool>? _remoteRaceDoneTcs;
 
         // Animation
         private readonly SemaphoreSlim _animLock = new SemaphoreSlim(1, 1);
@@ -62,12 +52,132 @@ namespace parallel_project
         private const int RequiredClicksDefault = 12;
         private const int RaceTimeoutMs = 9000;
 
+        private const int RequiredPressesPerRound = 5;
+
+        // Activity 3 (keyboard mash race)
+        private bool _raceActive;
+        private int _raceLocalPressCount;
+
+        // Host-only: completion sources for determining the winner with Task.WhenAny.
+        private TaskCompletionSource<bool>? _hostLocalRaceDoneTcs;
+        private TaskCompletionSource<(HeroKind attackerKind, HeroKind targetKind)>? _hostRemoteRaceDoneTcs;
+
         //
         // Constructs the main game UI and initializes designer-created controls.
         //
         public Form1()
         {
             InitializeComponent();
+
+            // Capture keyboard input even when controls have focus.
+            KeyPreview = true;
+            KeyDown += Form1_KeyDown;
+
+            // ListBox (activity log) consumes letter keys for type-to-select.
+            // Install an app-level filter so A/L are still captured during the race.
+            _hotkeyFilter = new HotkeyMessageFilter(this);
+            Application.AddMessageFilter(_hotkeyFilter);
+        }
+
+        private readonly IMessageFilter _hotkeyFilter;
+
+        private sealed class HotkeyMessageFilter : IMessageFilter
+        {
+            private readonly Form1 _form;
+
+            public HotkeyMessageFilter(Form1 form)
+            {
+                _form = form;
+            }
+
+            public bool PreFilterMessage(ref Message m)
+            {
+                const int WM_KEYDOWN = 0x0100;
+                const int WM_SYSKEYDOWN = 0x0104;
+
+                if (m.Msg != WM_KEYDOWN && m.Msg != WM_SYSKEYDOWN)
+                    return false;
+
+                if (!_form._raceActive)
+                    return false;
+
+                Keys key = (Keys)m.WParam.ToInt32();
+                if (key != Keys.A && key != Keys.L)
+                    return false;
+
+                // Swallow the key so focused controls (lstLog) don't react.
+                return _form.TryHandleRaceHotkey(key);
+            }
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            // Intercept hotkeys even when a child control (e.g., lstLog) has focus.
+            if (TryHandleRaceHotkey(keyData))
+                return true;
+
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        private void Form1_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (TryHandleRaceHotkey(e.KeyCode))
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+        }
+
+        private bool TryHandleRaceHotkey(Keys key)
+        {
+            // P1 races with 'A', P2 races with 'L'. First to RequiredPressesPerRound attacks.
+            if (!_raceActive)
+                return false;
+
+            bool isP1Key = key == Keys.A;
+            bool isP2Key = key == Keys.L;
+            if (!isP1Key && !isP2Key)
+                return false;
+
+            string keySlot = isP1Key ? "P1" : "P2";
+            if (_localSlot != keySlot)
+                return false; // Not this instance's key.
+
+            try
+            {
+                EnsureSelectionDefaults();
+                UpdateSelectionHighlights();
+
+                _raceLocalPressCount++;
+
+                string keyName = keySlot == "P1" ? "A" : "L";
+                lblStatus.Text = "Race: press " + keyName + " " + _raceLocalPressCount + "/" + _requiredClicks;
+
+                if (_raceLocalPressCount < _requiredClicks)
+                    return true;
+
+                // Local finished.
+                _raceActive = false;
+                Log("Race complete: " + keySlot + " reached " + _requiredClicks + " presses." );
+
+                if (_isHost)
+                {
+                    _hostLocalRaceDoneTcs?.TrySetResult(true);
+                    return true;
+                }
+
+                if (_conn != null && _conn.IsConnected && _sessionCts != null)
+                {
+                    // Report the winner's chosen attacker + target to the host.
+                    _ = _conn.SendAsync("RACE_DONE|" + _roundId + "|" + (int)_selectedAttackerKind + "|" + (int)_selectedTargetKind, _sessionCts.Token);
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
         }
 
         //
@@ -93,6 +203,7 @@ namespace parallel_project
         protected override async void OnFormClosing(FormClosingEventArgs e)
         {
             base.OnFormClosing(e);
+            Application.RemoveMessageFilter(_hotkeyFilter);
             await CleanupAsync("Form closing");
         }
 
@@ -429,6 +540,24 @@ namespace parallel_project
         // Enables the UI flow for Activity 2 (team loading) after matchmaking is confirmed.
         private void UnlockTeamLoading()
         {
+            _loadUnlocked = true;
+            TryEnableLoadTeam();
+        }
+
+        private void TryEnableLoadTeam()
+        {
+            if (!_loadUnlocked)
+                return;
+
+            bool roleAssigned = _localSlot == "P1" || _localSlot == "P2";
+            if (!roleAssigned)
+            {
+                Log("Waiting for role assignment before team load...");
+                lblStatus.Text = "Connected. Waiting for role assignment...";
+                btnLoadTeam.Enabled = false;
+                return;
+            }
+
             Log("Match confirmed. Load Team unlocked.");
             lblStatus.Text = "Connected. Load your team.";
             btnLoadTeam.Enabled = true;
@@ -567,40 +696,15 @@ namespace parallel_project
             await RunRoundHostAsync();
         }
 
-        // -------------------- Activity 3: Interactive Speed Race --------------------
+        // -------------------- Activity 3: Combat "Speed Race" --------------------
 
-        // UI handler for the "Attack Race" button; increments click counter and completes the local race.
+        // UI handler for the "Attack Race" button.
         //
-        // @notes: Logic: When required clicks are reached it completes a TCS. The joiner also sends RACE_DONE (including current attacker/target selection) to the host.
+        // @notes: This project now uses the Chapter 2 Task combinator approach (Task.WhenAny) with Task.Delay based on hero Speed.
+        //        The button remains in the UI but isn't part of the speed race logic.
         private void AttackRaceClick()
         {
-            if (_roundId <= 0 && _requiredClicks == 0)
-                return;
-
-            if (!btnAttackRace.Enabled)
-                return;
-
-            _clickCount++;
-            lblStatus.Text = "Speed race: " + _clickCount + "/" + _requiredClicks;
-
-            if (_clickCount >= _requiredClicks)
-            {
-                if (_localClickDoneTcs != null && _localClickDoneTcs.TrySetResult(true))
-                {
-                    btnAttackRace.Enabled = false;
-                    Log("Speed race: local clicks complete." );
-
-                    if (_conn != null && _conn.IsConnected && _sessionCts != null)
-                    {
-                        // Only the joiner must report completion to host.
-                        if (!_isHost)
-                        {
-                            EnsureSelectionDefaults();
-                            _ = _conn.SendAsync("RACE_DONE|" + _roundId + "|" + (int)_selectedAttackerKind + "|" + (int)_selectedTargetKind, _sessionCts.Token);
-                        }
-                    }
-                }
-            }
+            Log("Activity 3: Use keyboard race (P1=A, P2=L). Button not used.");
         }
 
         // Host-only: runs a single round (race winner selection, attack resolution, and broadcasts).
@@ -620,56 +724,52 @@ namespace parallel_project
             }
 
             _roundId++;
-            _requiredClicks = _rng.Next(10, 16);
-            _clickCount = 0;
+            _requiredClicks = RequiredPressesPerRound;
+
+            _raceLocalPressCount = 0;
+            _raceActive = true;
 
             EnsureSelectionDefaults();
             UpdateSelectionHighlights();
+            btnAttackRace.Enabled = false;
 
-            _localClickDoneTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _remoteWinnerTcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _remoteRaceDoneTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _remoteChoiceReceived = false;
-
-            Log("Activity 3: ROUND_START broadcast. Required clicks: " + _requiredClicks);
+            Log("Activity 3: ROUND_START broadcast (mash race: P1=A, P2=L). Required: " + _requiredClicks);
             await BroadcastAsync("ROUND_START|" + _roundId + "|" + _requiredClicks + "|" + RaceTimeoutMs);
 
-            Log("Activity 3: Task.WhenAny (host) waiting for local vs remote vs timeout...");
-            Task finished = await Task.WhenAny(_localClickDoneTcs.Task, _remoteRaceDoneTcs.Task, Task.Delay(RaceTimeoutMs, _sessionCts.Token));
+            // Wait for either local completion or remote completion (or timeout).
+            _hostLocalRaceDoneTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _hostRemoteRaceDoneTcs = new TaskCompletionSource<(HeroKind attackerKind, HeroKind targetKind)>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            Task timeout = Task.Delay(RaceTimeoutMs, _sessionCts.Token);
+            Task finished = await Task.WhenAny(_hostLocalRaceDoneTcs.Task, _hostRemoteRaceDoneTcs.Task, timeout);
 
             string winnerSlot;
-            if (finished == _remoteRaceDoneTcs.Task)
-                winnerSlot = "P2";
-            else
-                winnerSlot = "P1";
+            HeroKind attackerKind;
+            HeroKind targetKind;
 
-            Log("Speed race winner: " + winnerSlot);
+            if (finished == _hostRemoteRaceDoneTcs.Task)
+            {
+                winnerSlot = "P2";
+                (attackerKind, targetKind) = await _hostRemoteRaceDoneTcs.Task;
+            }
+            else
+            {
+                // Local wins on tie/timeout.
+                winnerSlot = "P1";
+                attackerKind = _selectedAttackerKind;
+                targetKind = _selectedTargetKind;
+            }
+
+            _raceActive = false;
+
+            Log("Race winner: " + winnerSlot);
             await BroadcastAsync("ROUND_WINNER|" + _roundId + "|" + winnerSlot);
 
-            string attackerSlot;
-            string defenderSlot;
-            HeroKind attackerKind;
-            HeroKind defenderKind;
+            string attackerSlot = winnerSlot;
+            string defenderSlot = attackerSlot == "P1" ? "P2" : "P1";
 
-            if (winnerSlot == "P1")
-            {
-                attackerSlot = "P1";
-                defenderSlot = "P2";
-                attackerKind = _selectedAttackerKind;
-                defenderKind = _selectedTargetKind;
-            }
-            else
-            {
-                attackerSlot = "P2";
-                defenderSlot = "P1";
-
-                // If remote didn't send choices (shouldn't happen), use fallbacks.
-                attackerKind = _remoteChoiceReceived ? _remoteChosenAttackerKind : HeroKind.Warrior;
-                defenderKind = _remoteChoiceReceived ? _remoteChosenTargetKind : HeroKind.Warrior;
-            }
-
-            CombatEngine.AttackResult atk = await _combat.ResolveAttackAsync(_p1, _p2, attackerSlot, attackerKind, defenderSlot, defenderKind);
-            string attackWire = "ATTACK|" + _roundId + "|" + attackerSlot + "|" + (int)attackerKind + "|" + defenderSlot + "|" + (int)defenderKind + "|" + atk.Damage + "|" + atk.DefenderHpAfter + "|" + (atk.DefenderDied ? "1" : "0");
+            CombatEngine.AttackResult atk = await _combat.ResolveAttackAsync(_p1, _p2, attackerSlot, attackerKind, defenderSlot, targetKind);
+            string attackWire = "ATTACK|" + _roundId + "|" + atk.AttackerSlot + "|" + (int)atk.AttackerKind + "|" + atk.DefenderSlot + "|" + (int)atk.DefenderKind + "|" + atk.Damage + "|" + atk.DefenderHpAfter + "|" + (atk.DefenderDied ? "1" : "0");
             await BroadcastAsync(attackWire);
 
             if (atk.GameOver)
@@ -680,52 +780,6 @@ namespace parallel_project
 
             await Task.Delay(700, _sessionCts.Token);
             await RunRoundHostAsync();
-        }
-
-        // Enables the race UI for the current round and updates the status prompt.
-        private void EnableRaceUi()
-        {
-            btnAttackRace.Enabled = true;
-            lblStatus.Text = "Speed race: click " + _requiredClicks + " times!";
-        }
-
-        // Local helper that times out the race if clicks aren't finished in time.
-        //
-        // @param roundId: Round identifier for which this watcher is valid.
-        // @param timeoutMs: How long to wait before forcing completion.
-        // @param token: Cancellation token for aborting the watcher.
-        // @notes: Logic: After the timeout, completes the local TCS (if still pending) so the round can continue.
-        private async Task RunLocalRaceWatcherAsync(int roundId, int timeoutMs, CancellationToken token)
-        {
-            try
-            {
-                Log("Activity 3: Task.WhenAny (local) started." );
-                Task timeout = Task.Delay(timeoutMs, token);
-                Task finished = await Task.WhenAny(_localClickDoneTcs!.Task, _remoteWinnerTcs!.Task, timeout);
-
-                if (finished == timeout)
-                {
-                    Log("Speed race timeout (waiting for winner)..." );
-                    btnAttackRace.Enabled = false;
-                    await _remoteWinnerTcs.Task;
-                    return;
-                }
-
-                if (finished == _remoteWinnerTcs.Task)
-                {
-                    btnAttackRace.Enabled = false;
-                    return;
-                }
-
-                // Local completed first; we already sent RACE_DONE in the click handler.
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            catch (Exception ex)
-            {
-                Log("Local race watcher error: " + ex.Message);
-            }
         }
 
         // -------------------- Networking --------------------
@@ -765,6 +819,7 @@ namespace parallel_project
                     _localSlot = payload.Trim();
                     Log("Role assigned: " + _localSlot);
                     SetRoleLabels();
+                    TryEnableLoadTeam();
                     break;
 
                 case "READYWIN":
@@ -813,6 +868,26 @@ namespace parallel_project
                     HandleGameOver(payload);
                     break;
             }
+        }
+
+        // Host-only: receives remote race completion and the remote's chosen attacker/target.
+        //
+        // @param payload: "roundId|attackerKind|targetKind" payload.
+        private void HandleRaceDone(string payload)
+        {
+            if (!_isHost) return;
+            // RACE_DONE|roundId|attackerKind|targetKind
+            string[] parts = payload.Split('|');
+            if (parts.Length < 3) return;
+
+            int roundId = int.Parse(parts[0]);
+            if (roundId != _roundId) return;
+
+            HeroKind attackerKind = (HeroKind)int.Parse(parts[1]);
+            HeroKind targetKind = (HeroKind)int.Parse(parts[2]);
+
+            _hostRemoteRaceDoneTcs?.TrySetResult((attackerKind, targetKind));
+            Log("Remote race complete.");
         }
 
         // Handles TEAM_READY messages by reconstructing the sender's hero roster.
@@ -886,42 +961,23 @@ namespace parallel_project
             _roundId = int.Parse(parts[0]);
             _requiredClicks = int.Parse(parts[1]);
             int timeoutMs = int.Parse(parts[2]);
-            _clickCount = 0;
+
+            _raceLocalPressCount = 0;
+            _raceActive = true;
 
             EnsureSelectionDefaults();
             UpdateSelectionHighlights();
 
-            _localClickDoneTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _remoteWinnerTcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-            EnableRaceUi();
-            Log("Round " + _roundId + " started. Required clicks: " + _requiredClicks);
-            _ = RunLocalRaceWatcherAsync(_roundId, timeoutMs, _sessionCts?.Token ?? CancellationToken.None);
+            btnAttackRace.Enabled = false;
+            string key = _localSlot == "P1" ? "A" : "L";
+            lblStatus.Text = "Race: press " + key + " 0/" + _requiredClicks;
+            Log("Round " + _roundId + " started (mash race). Required: " + _requiredClicks + ". Timeout: " + timeoutMs + "ms");
+            return;
         }
 
-        // Host-only: receives remote race completion and the remote's chosen attacker/target.
+        // Handles ROUND_WINNER broadcast by updating UI and (on the winner) enabling keyboard attack.
         //
-        // @param payload: "roundId|attackerKind|targetKind" payload.
-        // @notes: Logic: Stores the remote selection and completes the host-side TCS used to decide the race winner.
-        private void HandleRaceDone(string payload)
-        {
-            if (!_isHost) return;
-            // RACE_DONE|roundId|attackerKind|targetKind
-            string[] parts = payload.Split('|');
-            if (parts.Length < 3) return;
-            int roundId = int.Parse(parts[0]);
-            if (roundId != _roundId) return;
-
-            _remoteChosenAttackerKind = (HeroKind)int.Parse(parts[1]);
-            _remoteChosenTargetKind = (HeroKind)int.Parse(parts[2]);
-            _remoteChoiceReceived = true;
-
-            _remoteRaceDoneTcs?.TrySetResult(true);
-        }
-
-        // Handles ROUND_WINNER broadcast by disabling race UI and completing the winner TCS.
-        //
-        // @param payload: "roundId|P1" or "roundId|P2" payload.
+        // @param payload: "roundId|P1|winnerKind" or "roundId|P2|winnerKind" payload.
         private void HandleRoundWinner(string payload)
         {
             // ROUND_WINNER|roundId|P1/P2
@@ -932,9 +988,15 @@ namespace parallel_project
             string winnerSlot = parts[1];
             if (roundId != _roundId) return;
 
+            _raceActive = false;
+
             Log("Round winner: " + winnerSlot);
             btnAttackRace.Enabled = false;
-            _remoteWinnerTcs?.TrySetResult(winnerSlot);
+
+            if (_localSlot == winnerSlot)
+                lblStatus.Text = "You won the race! Attacking...";
+            else
+                lblStatus.Text = "Opponent won the race. Incoming attack...";
         }
 
         // Handles ATTACK broadcasts by animating the attack and applying defender HP.
@@ -1378,7 +1440,7 @@ namespace parallel_project
             _fightCountdownStarted = false;
             _attackerSelected = false;
             _targetSelected = false;
-            _remoteChoiceReceived = false;
+            _loadUnlocked = false;
         }
 
         // Clears round/race-related state so a new match/round sequence can start cleanly.
@@ -1386,10 +1448,10 @@ namespace parallel_project
         {
             _roundId = 0;
             _requiredClicks = 0;
-            _clickCount = 0;
-            _localClickDoneTcs = null;
-            _remoteWinnerTcs = null;
-            _remoteRaceDoneTcs = null;
+            _raceActive = false;
+            _raceLocalPressCount = 0;
+            _hostLocalRaceDoneTcs = null;
+            _hostRemoteRaceDoneTcs = null;
         }
 
         // Writes a loaded/deserialized team into the correct local player slot (P1 or P2).
